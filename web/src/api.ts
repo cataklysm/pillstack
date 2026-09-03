@@ -1,14 +1,20 @@
 import type {
   AddPackageInput,
+  AppNotification,
+  ConstraintInput,
   CorrectStockInput,
   CreateProductInput,
   DayProfile,
   DayTimeline,
+  IntakeConstraint,
   IntakeLogEntry,
   InventoryStatus,
   InventoryTransaction,
+  MovePreview,
   Product,
   RecordIntakeInput,
+  ReminderRule,
+  ReminderRuleInput,
   ScheduledIntake,
   SearchResult,
   StartTreatmentInput,
@@ -89,8 +95,15 @@ export const api = {
       request<DayTimeline>(`/api/schedule/day${date ? `?date=${date}` : ''}`),
     next: () => request<{ intake: ScheduledIntake | null }>('/api/schedule/next'),
     today: () => request<{ date: string }>('/api/schedule/today'),
-    move: (input: { planDoseId: string; occurrenceDate: string; time: string; reason?: string }) =>
-      post<DayTimeline>('/api/schedule/move', input),
+    previewMove: (input: { planDoseId: string; occurrenceDate: string; time: string }) =>
+      post<MovePreview>('/api/schedule/preview-move', input),
+    move: (input: {
+      planDoseId: string;
+      occurrenceDate: string;
+      time: string;
+      reason?: string;
+      acknowledgeConstraintIds?: string[];
+    }) => post<DayTimeline>('/api/schedule/move', input),
     clearOverride: (input: { planDoseId: string; occurrenceDate: string }) =>
       post<DayTimeline>('/api/schedule/clear-override', input),
   },
@@ -135,6 +148,34 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify({ timeZone }),
       }),
+  },
+
+  constraints: {
+    list: () => request<IntakeConstraint[]>('/api/constraints'),
+    create: (input: ConstraintInput) => post<IntakeConstraint>('/api/constraints', input),
+    update: (id: string, input: ConstraintInput) =>
+      request<IntakeConstraint>(`/api/constraints/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      }),
+    setEnabled: (id: string, enabled: boolean) =>
+      post<IntakeConstraint>(`/api/constraints/${id}/enabled`, { enabled }),
+    remove: (id: string) => request<void>(`/api/constraints/${id}`, { method: 'DELETE' }),
+    substances: () => request<{ id: string; name: string }[]>('/api/substances'),
+  },
+
+  reminders: {
+    rules: () => request<ReminderRule[]>('/api/reminders/rules'),
+    createRule: (input: ReminderRuleInput) => post<ReminderRule>('/api/reminders/rules', input),
+    updateRule: (id: string, input: ReminderRuleInput) =>
+      request<ReminderRule>(`/api/reminders/rules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      }),
+    deleteRule: (id: string) => request<void>(`/api/reminders/rules/${id}`, { method: 'DELETE' }),
+    due: () => request<AppNotification[]>('/api/notifications/due'),
+    markDelivered: (ids: string[]) => post<void>('/api/notifications/delivered', { ids }),
+    dismiss: (id: string) => post<void>(`/api/notifications/${id}/dismiss`),
   },
 
   search: (q: string) => request<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`),

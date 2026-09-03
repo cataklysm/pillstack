@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { constraintViolationSchema } from './constraints.js';
 import {
   identifierSchema,
   instantSchema,
@@ -69,6 +70,8 @@ export const dayTimelineSchema = z.object({
   date: localDateSchema,
   timeZone: z.string(),
   slots: z.array(timelineSlotSchema),
+  /** Rules broken by this arrangement. Advisory only — nothing is blocked. */
+  violations: z.array(constraintViolationSchema),
   /** As-needed medication available on this day; not placed on the timeline. */
   asNeeded: z.array(scheduledIntakeSchema),
 });
@@ -78,6 +81,8 @@ export const moveIntakeInputSchema = z.object({
   occurrenceDate: localDateSchema,
   time: localTimeSchema,
   reason: z.string().max(500).nullish(),
+  /** Constraint ids the user consciously overrode, so they stop nagging. */
+  acknowledgeConstraintIds: z.array(identifierSchema).nullish(),
 });
 
 export const clearIntakeOverrideInputSchema = z.object({

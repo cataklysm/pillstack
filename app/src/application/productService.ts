@@ -137,6 +137,12 @@ export class ProductService {
     return product;
   }
 
+  /** Canonical substances, for the endpoint picker when writing a constraint. */
+  async listSubstances(query?: string) {
+    const substances = new SubstanceRepository(this.db);
+    return query ? substances.search(query) : substances.list();
+  }
+
   private async writeIngredients(
     products: ProductRepository,
     substances: SubstanceRepository,

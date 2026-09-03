@@ -1,8 +1,11 @@
 import {
   clearIntakeOverrideInputSchema,
   moveIntakeInputSchema,
+  previewMoveInputSchema,
   type DayTimeline,
   type LocalDate,
+  type LocalTime,
+  type MovePreview,
   type ScheduledIntake,
 } from '@pillstack/contracts';
 import { addDays, instantToLocalDate } from '../domain/schedules/calendar.js';
@@ -14,6 +17,7 @@ import {
   SettingsRepository,
 } from '../persistence/repositories/settingsRepository.js';
 import type { Clock } from './clock.js';
+import type { ConstraintService } from './constraintService.js';
 import { NotFoundError, ValidationError } from './errors.js';
 import { createId } from './ids.js';
 
@@ -24,6 +28,7 @@ export class ScheduleService {
   constructor(
     private readonly db: PillstackDatabase,
     private readonly clock: Clock,
+    private readonly constraints: ConstraintService,
   ) {}
 
   async today(): Promise<LocalDate> {
@@ -32,10 +37,15 @@ export class ScheduleService {
   }
 
   async dayTimeline(date?: string): Promise<DayTimeline> {
-    const timelines = await this.timelinesForRange(date ?? (await this.today()), 0);
+    const target = date ?? (await this.today());
+    const timelines = await this.timelinesForRange(target, 0);
     const timeline = timelines[0];
-    if (!timeline) throw new NotFoundError('timeline', date ?? 'today');
-    return timeline;
+    if (!timeline) throw new NotFoundError('timeline', target);
+
+    const dayProfile = await new DayProfileRepository(this.db).getDefault(
+      this.clock.now().toISOString(),
+    );
+    return { ...timeline, violations: await this.constraints.evaluateDay(timeline, dayProfile) };
   }
 
   /**
@@ -49,14 +59,45 @@ export class ScheduleService {
   }
 
   /**
+   * What would break if an intake moved, without saving anything.
+   *
+   * This is what makes the warning honest: it compares the violations the new
+   * time would cause against the ones already present, so the user is only
+   * asked about clashes their move actually introduces.
+   */
+  async previewMove(rawInput: unknown): Promise<MovePreview> {
+    const parsed = previewMoveInputSchema.safeParse(rawInput);
+    if (!parsed.success) throw new ValidationError('invalid preview', parsed.error.issues);
+
+    const input = parsed.data;
+    const timelines = await this.timelinesForRange(input.occurrenceDate, 0);
+    const timeline = timelines[0];
+    if (!timeline) throw new NotFoundError('timeline', input.occurrenceDate);
+
+    const dayProfile = await new DayProfileRepository(this.db).getDefault(
+      this.clock.now().toISOString(),
+    );
+
+    const [violations, currentViolations] = await Promise.all([
+      this.constraints.evaluateDay(timeline, dayProfile, {
+        replace: { planDoseId: input.planDoseId, time: input.time as LocalTime },
+      }),
+      this.constraints.evaluateDay(timeline, dayProfile),
+    ]);
+
+    return { violations, currentViolations };
+  }
+
+  /**
    * Move a single occurrence to a different time.
    *
    * Deliberately an exception for one day, recorded as a schedule override —
    * the plan version is untouched. A permanent change goes through
    * `TreatmentService.changePlan`, which creates a new version instead.
    *
-   * Constraint warnings are evaluated here in Milestone 3; the override already
-   * carries the `acknowledged_constraints` column they will use.
+   * Constraint warnings never block the move. Ids passed in
+   * `acknowledgeConstraintIds` are recorded against the override so the same
+   * warning, once consciously accepted, stops being raised.
    */
   async moveIntake(rawInput: unknown): Promise<DayTimeline> {
     const parsed = moveIntakeInputSchema.safeParse(rawInput);
@@ -79,6 +120,14 @@ export class ScheduleService {
       createdAt: this.clock.now().toISOString(),
     });
 
+    if (input.acknowledgeConstraintIds?.length) {
+      await this.constraints.acknowledge(
+        input.planDoseId,
+        input.occurrenceDate,
+        input.acknowledgeConstraintIds,
+      );
+    }
+
     return this.dayTimeline(input.occurrenceDate);
   }
 
@@ -94,7 +143,8 @@ export class ScheduleService {
   /**
    * Builds timelines for `from` through `from + additionalDays`, loading the
    * whole range in one pass so a week view costs the same three queries as a
-   * single day.
+   * single day. Violations are not attached here — `dayTimeline` adds them for
+   * the single day the user is looking at.
    */
   private async timelinesForRange(from: string, additionalDays: number): Promise<DayTimeline[]> {
     const to = addDays(from as LocalDate, additionalDays);

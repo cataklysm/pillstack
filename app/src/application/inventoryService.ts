@@ -341,6 +341,7 @@ export function buildStatus(input: BuildStatusInput): InventoryStatus {
     packageUnit: input.product.packageUnit,
     policy: input.policy,
     currentQuantity: quantity,
+    stockRecorded: input.ledger.length > 0,
     asOf: input.today,
     estimatedDailyConsumption: projection.estimatedDailyConsumption,
     daysOfCover: projection.daysOfCover,

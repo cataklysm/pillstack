@@ -32,7 +32,7 @@ npm run start --workspace=app         # everything on http://127.0.0.1:5174
 ### Tests
 
 ```bash
-npm test            # 158 tests: domain logic, schema invariants, services
+npm test            # 209 tests: domain logic, schema invariants, services, HTTP
 ```
 
 ### Where the data lives
@@ -84,8 +84,8 @@ rewriting your history.
 |---|---|
 | 1 — setup, SQLite, migrations, products, ingredients, schedules, daily timeline | done |
 | 2 — inventory ledger, depletion, reorder dates, intake log, history views | done |
-| 3 — constraints, warnings when moving intakes, reminders | next |
-| 4 — physician PDF, JSON export, backup and restore | |
+| 3 — constraints, warnings when moving intakes, reminders | done |
+| 4 — physician PDF, JSON export, backup and restore | next |
 | 5 — UX polish, schedule optimizer, desktop packaging | |
 
 The schema already contains the tables for milestones 2 to 4 (inventory,

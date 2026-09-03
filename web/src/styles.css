@@ -483,3 +483,13 @@ tbody tr:last-child td {
     gap: 0.15rem;
   }
 }
+
+/* A day, or a pending move, that breaks one of the user's rules. */
+.card.warning-card {
+  border-left: 3px solid var(--warning);
+}
+
+.intake.has-violation {
+  border-left-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 6%, var(--surface));
+}

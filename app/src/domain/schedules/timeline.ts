@@ -147,6 +147,9 @@ export function buildDayTimeline(input: BuildDayTimelineInput): DayTimeline {
     date,
     timeZone,
     slots: groupIntoSlots(scheduled),
+    // Constraint evaluation needs the user's rules, which are I/O; the
+    // application layer fills this in after building the arrangement.
+    violations: [],
     asNeeded: asNeeded.sort((left, right) => left.productName.localeCompare(right.productName)),
   };
 }

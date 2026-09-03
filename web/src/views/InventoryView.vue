@@ -7,7 +7,9 @@ const statuses = ref<InventoryStatus[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
 
-const needsReorder = computed(() => statuses.value.filter((status) => status.reorderDue));
+const needsReorder = computed(() =>
+  statuses.value.filter((status) => status.reorderDue && status.stockRecorded),
+);
 const expiringSoon = computed(() =>
   statuses.value.filter((status) => status.expiresBeforeDepletion && !status.reorderDue),
 );
@@ -125,7 +127,10 @@ onMounted(() => void load());
                 <td class="small">
                   {{ status.daysOfCover === null ? '—' : `${status.daysOfCover} days` }}
                 </td>
-                <td class="small">{{ status.runOutDate ?? '—' }}</td>
+                <td class="small">
+                  <span v-if="!status.stockRecorded" class="muted">not tracked</span>
+                  <template v-else>{{ status.runOutDate ?? '—' }}</template>
+                </td>
                 <td class="small">
                   <template v-if="status.reorderDate">
                     <span :class="status.reorderDue ? 'tag warning' : ''">

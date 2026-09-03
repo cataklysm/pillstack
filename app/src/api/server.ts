@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConflictError, NotFoundError, ValidationError } from '../application/errors.js';
 import type { Services } from '../application/container.js';
+import { registerConstraintRoutes } from './routes/constraints.js';
 import { registerIntakeLogRoutes } from './routes/intakeLog.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
 import { registerProductRoutes } from './routes/products.js';
+import { registerReminderRoutes } from './routes/reminders.js';
 import { registerScheduleRoutes } from './routes/schedule.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTreatmentRoutes } from './routes/treatments.js';
@@ -28,14 +30,37 @@ export function createServer(options: ServerOptions): FastifyInstance {
     if (error instanceof ConflictError) {
       return reply.status(409).send({ error: error.message });
     }
-    // Fastify's own schema validation failures.
-    if (error instanceof Error && 'validation' in error) {
-      return reply.status(400).send({ error: error.message });
+    // Fastify's own errors (schema validation, malformed or empty JSON,
+    // payload too large) already carry the right status. Honour it rather than
+    // flattening a 400 into a 500 and hiding what actually went wrong.
+    if (error instanceof Error && 'statusCode' in error) {
+      const statusCode = Number((error as { statusCode?: unknown }).statusCode);
+      if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {
+        return reply.status(statusCode).send({ error: error.message });
+      }
     }
 
     app.log.error(error);
     return reply.status(500).send({ error: 'internal error' });
   });
+
+  // A parameterless POST (dismiss, archive) may legitimately arrive with a JSON
+  // content type and no body; treat that as an empty object rather than an error.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body: string, done) => {
+      if (body.trim().length === 0) return done(null, {});
+      try {
+        done(null, JSON.parse(body));
+      } catch {
+        // A raw SyntaxError carries no status and would surface as a 500.
+        const failure = new Error('invalid JSON body') as Error & { statusCode: number };
+        failure.statusCode = 400;
+        done(failure, undefined);
+      }
+    },
+  );
 
   app.get('/api/health', async () => ({ status: 'ok' }));
 
@@ -44,6 +69,8 @@ export function createServer(options: ServerOptions): FastifyInstance {
   registerScheduleRoutes(app, options.services);
   registerInventoryRoutes(app, options.services);
   registerIntakeLogRoutes(app, options.services);
+  registerConstraintRoutes(app, options.services);
+  registerReminderRoutes(app, options.services);
   registerSettingsRoutes(app, options.services);
 
   return app;

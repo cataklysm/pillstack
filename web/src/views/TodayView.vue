@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { DayTimeline, InventoryStatus, ScheduledIntake } from '@pillstack/contracts';
+import type {
+  ConstraintViolation,
+  DayTimeline,
+  InventoryStatus,
+  ScheduledIntake,
+} from '@pillstack/contracts';
 import { computed, onMounted, ref } from 'vue';
 import { api, ApiError } from '../api';
 
@@ -15,7 +20,18 @@ const loading = ref(true);
 const editing = ref<string | null>(null);
 const editedTime = ref('');
 
+/** A move waiting on the user to accept the warnings it would introduce. */
+const pendingMove = ref<{
+  intake: ScheduledIntake;
+  time: string;
+  violations: ConstraintViolation[];
+} | null>(null);
+
 const isToday = computed(() => date.value === today.value);
+
+const violatedKeys = computed(
+  () => new Set((timeline.value?.violations ?? []).flatMap((violation) => violation.occurrenceKeys)),
+);
 
 const totalIntakes = computed(
   () => timeline.value?.slots.reduce((count, slot) => count + slot.intakes.length, 0) ?? 0,
@@ -52,20 +68,65 @@ function startEditing(intake: ScheduledIntake) {
  * Moving an intake is an exception for this day only — the plan version behind
  * it is untouched. Making the change permanent is a plan change on the product
  * page, which creates a new version and keeps the old one in the history.
+ *
+ * Before saving, the move is previewed against the rules. Only clashes the move
+ * would *introduce* are raised — anything already broken at the current time is
+ * not blamed on this edit. The user can always go ahead anyway.
  */
 async function applyMove(intake: ScheduledIntake) {
   if (!editedTime.value || editedTime.value === intake.scheduledTime) {
     editing.value = null;
     return;
   }
+
   try {
-    timeline.value = await api.schedule.move({
+    const preview = await api.schedule.previewMove({
       planDoseId: intake.planDoseId,
       occurrenceDate: intake.occurrenceDate,
       time: editedTime.value,
     });
-    editing.value = null;
-    if (isToday.value) nextIntake.value = (await api.schedule.next()).intake;
+
+    const existing = new Set(preview.currentViolations.map((violation) => violation.constraintId));
+    const introduced = preview.violations.filter(
+      (violation) => !existing.has(violation.constraintId),
+    );
+
+    if (introduced.length > 0) {
+      pendingMove.value = { intake, time: editedTime.value, violations: introduced };
+      return;
+    }
+
+    await commitMove(intake, editedTime.value, []);
+  } catch (cause) {
+    error.value = cause instanceof ApiError ? cause.message : 'could not move that intake';
+  }
+}
+
+async function commitMove(
+  intake: ScheduledIntake,
+  time: string,
+  acknowledgeConstraintIds: string[],
+) {
+  timeline.value = await api.schedule.move({
+    planDoseId: intake.planDoseId,
+    occurrenceDate: intake.occurrenceDate,
+    time,
+    acknowledgeConstraintIds,
+  });
+  editing.value = null;
+  pendingMove.value = null;
+  if (isToday.value) nextIntake.value = (await api.schedule.next()).intake;
+}
+
+async function confirmPendingMove() {
+  const pending = pendingMove.value;
+  if (!pending) return;
+  try {
+    await commitMove(
+      pending.intake,
+      pending.time,
+      pending.violations.map((violation) => violation.constraintId),
+    );
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : 'could not move that intake';
   }
@@ -108,7 +169,7 @@ async function record(intake: ScheduledIntake, status: 'taken' | 'skipped') {
 async function loadAttention() {
   try {
     const statuses = await api.inventory.list();
-    lowStock.value = statuses.filter((entry) => entry.reorderDue);
+    lowStock.value = statuses.filter((entry) => entry.reorderDue && entry.stockRecorded);
   } catch {
     // The timeline is the point of this page; a failing sidebar must not break it.
     lowStock.value = [];
@@ -144,6 +205,48 @@ onMounted(() => {
     </div>
 
     <p v-if="error" class="banner error">{{ error }}</p>
+
+    <!--
+      A move is never blocked. The user is told exactly what it would break and
+      decides; accepting records the acknowledgement so it does not nag again.
+    -->
+    <div v-if="pendingMove" class="card warning-card" style="margin-bottom: 1.25rem">
+      <div class="card-body">
+        <h2>Moving {{ pendingMove.intake.productName }} to {{ pendingMove.time }}</h2>
+        <p class="small muted" style="margin: 0.2rem 0 0.8rem">
+          This would break {{ pendingMove.violations.length }}
+          {{ pendingMove.violations.length === 1 ? 'rule' : 'rules' }} you set.
+        </p>
+
+        <ul style="margin: 0; padding-left: 1.1rem">
+          <li v-for="violation in pendingMove.violations" :key="violation.constraintId">
+            {{ violation.message }}
+            <div v-if="violation.explanation" class="small muted">{{ violation.explanation }}</div>
+          </li>
+        </ul>
+
+        <div style="display: flex; gap: 0.6rem; margin-top: 1rem">
+          <button class="primary" @click="confirmPendingMove">Move it anyway</button>
+          <button @click="pendingMove = null">Keep the current time</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules broken by the day as it currently stands. -->
+    <div v-if="timeline?.violations.length" class="card warning-card" style="margin-bottom: 1.25rem">
+      <div class="card-body">
+        <div class="small muted">Warnings for this day</div>
+        <ul style="margin: 0.4rem 0 0; padding-left: 1.1rem">
+          <li v-for="violation in timeline.violations" :key="violation.constraintId + violation.message" class="small">
+            <span class="tag" :class="violation.severity === 'warning' ? 'warning' : 'neutral'">
+              {{ violation.severity }}
+            </span>
+            {{ violation.message }}
+            <span v-if="violation.explanation" class="muted"> {{ violation.explanation }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
 
     <!-- Answers "are prescriptions or purchases required soon?" -->
     <div v-if="lowStock.length" class="card" style="margin-bottom: 1.25rem">
@@ -193,7 +296,7 @@ onMounted(() => {
             v-for="intake in slot.intakes"
             :key="intake.occurrenceKey"
             class="intake"
-            :class="intake.category"
+            :class="[intake.category, { 'has-violation': violatedKeys.has(intake.occurrenceKey) }]"
           >
             <div class="intake-main">
               <div class="intake-name">

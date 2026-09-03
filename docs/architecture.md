@@ -422,7 +422,7 @@ an intake → watch stock drop.
 |---|---|
 | 1 ✅ | Workspaces, SQLite, Kysely migrations, products, substances, ingredients, treatments, versioned intake plans, day profile, daily timeline |
 | 2 ✅ | Inventory ledger, packages, depletion and reorder projection, intake log, treatment history views |
-| 3 | Constraints, drag-with-warning on the timeline, reminder rules and notification outbox, browser delivery |
+| 3 ✅ | Constraints, move-with-warning on the timeline, reminder rules and notification outbox, browser delivery |
 | 4 | Physician PDF, treatment history PDF, JSON export/import, backup and restore |
 | 5 | UX polish, schedule optimizer, optional Electron packaging |
 
@@ -445,3 +445,57 @@ an intake → watch stock drop.
    model cannot.
 5. **`day_profile` pulled into Milestone 1.** Meal-relative doses cannot be
    placed on a timeline without meal times.
+
+---
+
+## 13. Constraints and reminders (Milestone 3)
+
+### Constraint evaluation
+
+`domain/constraints/evaluation.ts` is a pure function over a day's arrangement,
+the user's rules and the meal times. It contains **no medical knowledge at all**:
+every rule it evaluates was entered by the user. `intake_constraint.origin`
+already distinguishes `user` from `catalog`, so a curated interaction set can be
+layered in later without touching what the user wrote, and rules that reference a
+*substance* apply to every product containing it — including products added
+afterwards.
+
+Three behaviours worth stating explicitly:
+
+- **Nothing is ever blocked.** A violation is advisory. The user may keep any
+  schedule and acknowledge the warning, which is recorded in
+  `schedule_override.acknowledged_constraints` so it stops being raised for that
+  occurrence.
+- **A move is previewed before it is saved.** `previewMove` evaluates the day
+  with the occurrence relocated and compares the result against the violations
+  already present, so the user is only asked about clashes their edit actually
+  *introduces* — not about something that was already broken.
+- **A missing meal time silences a food rule** rather than firing against a time
+  we do not have.
+
+### Reminders
+
+`domain/reminders/generation.ts` decides what to announce and when; it knows
+nothing about how a notification reaches a human.
+
+```
+domain/reminders     →  notification outbox  →  NotificationDeliveryPort
+ (what, and when)        (dedupe_key unique)      ├─ OutboxDeliveryPort (default)
+                                                  └─ native port (desktop, later)
+```
+
+Generation is **idempotent**: every notification carries a `dedupe_key` that is
+unique-indexed, so it simply runs on each client poll. There is no cron job, no
+background worker, and nothing is lost when the app has been closed for a week.
+Notifications for occurrences that no longer stand — a dose taken, skipped or
+moved — are discarded rather than left to fire wrongly.
+
+Two rules the smoke test forced into the open:
+
+- A reminder whose moment has just passed is exactly the one worth showing, so
+  intake reminders survive for `MISSED_DOSE_GRACE_MINUTES` past their time
+  instead of vanishing. Beyond that they are dropped, so a user who never
+  confirms doses does not accumulate a pile of stale reminders.
+- A product whose stock was never recorded produces no reorder reminder at all.
+  Without a package or a count there is nothing to run out of, and reporting
+  "runs out tomorrow" for every untracked product is pure noise.

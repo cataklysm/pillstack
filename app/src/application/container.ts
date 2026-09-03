@@ -3,9 +3,11 @@ import type { OpenedDatabase, PillstackDatabase } from '../persistence/database.
 import { DayProfileRepository, SettingsRepository } from '../persistence/repositories/settingsRepository.js';
 import { systemClock, type Clock } from './clock.js';
 import { ValidationError } from './errors.js';
+import { ConstraintService } from './constraintService.js';
 import { InventoryService } from './inventoryService.js';
 import { IntakeLogService } from './intakeLogService.js';
 import { ProductService } from './productService.js';
+import { ReminderService } from './reminderService.js';
 import { ScheduleService } from './scheduleService.js';
 import { SearchService } from './searchService.js';
 import { TreatmentService } from './treatmentService.js';
@@ -56,6 +58,8 @@ export interface Services {
   schedule: ScheduleService;
   inventory: InventoryService;
   intakeLog: IntakeLogService;
+  constraints: ConstraintService;
+  reminders: ReminderService;
   search: SearchService;
   settings: SettingsService;
 }
@@ -68,12 +72,20 @@ export interface Services {
 export function createServices(opened: OpenedDatabase, clock: Clock = systemClock): Services {
   const { db } = opened;
 
+  // The schedule needs the constraint evaluator to annotate a day, and the
+  // reminder generator needs both the schedule and the inventory projection.
+  const constraints = new ConstraintService(db, clock);
+  const schedule = new ScheduleService(db, clock, constraints);
+  const inventory = new InventoryService(db, clock);
+
   return {
     products: new ProductService(db, clock),
     treatments: new TreatmentService(db, clock),
-    schedule: new ScheduleService(db, clock),
-    inventory: new InventoryService(db, clock),
+    schedule,
+    inventory,
     intakeLog: new IntakeLogService(db, clock),
+    constraints,
+    reminders: new ReminderService(db, clock, schedule, inventory),
     search: new SearchService(db),
     settings: new SettingsService(db, clock),
   };

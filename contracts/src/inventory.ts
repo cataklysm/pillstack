@@ -65,6 +65,8 @@ export const inventoryStatusSchema = z.object({
 
   /** Stock at the end of `asOf`, derived from the ledger — never a stored number. */
   currentQuantity: z.number(),
+  /** False when no package or count has ever been recorded for this product. */
+  stockRecorded: z.boolean(),
   asOf: localDateSchema,
 
   estimatedDailyConsumption: z.number(),

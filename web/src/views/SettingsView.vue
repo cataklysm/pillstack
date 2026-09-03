@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import type { DayProfile } from '@pillstack/contracts';
+import type { DayProfile, ReminderRule, ReminderType } from '@pillstack/contracts';
 import { onMounted, reactive, ref } from 'vue';
 import { api, ApiError } from '../api';
 
 const saved = ref(false);
 const error = ref<string | null>(null);
 const timeZone = ref('');
+
+const reminderRules = ref<ReminderRule[]>([]);
+const showReminderForm = ref(false);
+const reminderForm = reactive({
+  reminderType: 'intake' as ReminderType,
+  leadTimeMinutes: 15,
+  leadTimeDays: 14,
+  quietHoursFrom: '',
+  quietHoursTo: '',
+});
 
 const profile = reactive({
   wakeUpTime: '07:00',
@@ -26,6 +36,31 @@ function apply(loaded: DayProfile) {
 async function load() {
   apply(await api.settings.dayProfile());
   timeZone.value = (await api.settings.timeZone()).timeZone;
+  reminderRules.value = await api.reminders.rules();
+}
+
+async function saveReminder() {
+  error.value = null;
+  try {
+    await api.reminders.createRule({
+      reminderType: reminderForm.reminderType,
+      leadTimeMinutes:
+        reminderForm.reminderType === 'intake' ? Number(reminderForm.leadTimeMinutes) : null,
+      leadTimeDays:
+        reminderForm.reminderType === 'intake' ? null : Number(reminderForm.leadTimeDays),
+      quietHoursFrom: reminderForm.quietHoursFrom || null,
+      quietHoursTo: reminderForm.quietHoursTo || null,
+    });
+    showReminderForm.value = false;
+    reminderRules.value = await api.reminders.rules();
+  } catch (cause) {
+    error.value = cause instanceof ApiError ? cause.message : 'could not add that reminder';
+  }
+}
+
+async function deleteReminder(id: string) {
+  await api.reminders.deleteRule(id);
+  reminderRules.value = await api.reminders.rules();
 }
 
 async function save() {
@@ -95,6 +130,79 @@ onMounted(() => void load());
           </div>
 
           <div><button class="primary" @click="save">Save</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body stack">
+          <div style="display: flex; align-items: baseline">
+            <h2>Reminders</h2>
+            <div class="spacer" style="margin-left: auto"></div>
+            <button class="subtle" @click="showReminderForm = !showReminderForm">
+              {{ showReminderForm ? 'Close' : 'Add a reminder' }}
+            </button>
+          </div>
+          <!--
+            Reminders are generated on demand and wait in an outbox, so nothing
+            is missed while PillStack is closed and no background process runs.
+          -->
+          <p class="small muted" style="margin: 0">
+            Reminders appear in the app whenever it is open, and as desktop notifications if you
+            allow them. Nothing is sent anywhere.
+          </p>
+
+          <fieldset v-if="showReminderForm">
+            <legend>New reminder</legend>
+            <div class="field-row">
+              <label>
+                For
+                <select v-model="reminderForm.reminderType">
+                  <option value="intake">intakes</option>
+                  <option value="reorder">reordering</option>
+                  <option value="prescription">prescriptions</option>
+                </select>
+              </label>
+              <label v-if="reminderForm.reminderType === 'intake'">
+                Minutes before the dose
+                <input v-model.number="reminderForm.leadTimeMinutes" type="number" min="0" />
+              </label>
+              <label v-else>
+                Days before the reorder date
+                <input v-model.number="reminderForm.leadTimeDays" type="number" min="0" />
+              </label>
+              <label>
+                Quiet from
+                <input v-model="reminderForm.quietHoursFrom" type="time" />
+              </label>
+              <label>
+                Quiet until
+                <input v-model="reminderForm.quietHoursTo" type="time" />
+              </label>
+            </div>
+            <button class="primary" style="margin-top: 0.6rem" @click="saveReminder">Add</button>
+          </fieldset>
+
+          <div v-if="reminderRules.length === 0" class="muted small">
+            No reminders set. Without one, PillStack stays silent.
+          </div>
+          <div v-else class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reminder</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="rule in reminderRules" :key="rule.id">
+                  <td>{{ rule.summary }}</td>
+                  <td>
+                    <button class="subtle" @click="deleteReminder(rule.id)">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
