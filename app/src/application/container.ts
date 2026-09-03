@@ -3,6 +3,8 @@ import type { OpenedDatabase, PillstackDatabase } from '../persistence/database.
 import { DayProfileRepository, SettingsRepository } from '../persistence/repositories/settingsRepository.js';
 import { systemClock, type Clock } from './clock.js';
 import { ValidationError } from './errors.js';
+import { InventoryService } from './inventoryService.js';
+import { IntakeLogService } from './intakeLogService.js';
 import { ProductService } from './productService.js';
 import { ScheduleService } from './scheduleService.js';
 import { SearchService } from './searchService.js';
@@ -52,6 +54,8 @@ export interface Services {
   products: ProductService;
   treatments: TreatmentService;
   schedule: ScheduleService;
+  inventory: InventoryService;
+  intakeLog: IntakeLogService;
   search: SearchService;
   settings: SettingsService;
 }
@@ -68,6 +72,8 @@ export function createServices(opened: OpenedDatabase, clock: Clock = systemCloc
     products: new ProductService(db, clock),
     treatments: new TreatmentService(db, clock),
     schedule: new ScheduleService(db, clock),
+    inventory: new InventoryService(db, clock),
+    intakeLog: new IntakeLogService(db, clock),
     search: new SearchService(db),
     settings: new SettingsService(db, clock),
   };

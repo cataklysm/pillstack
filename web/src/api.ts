@@ -1,14 +1,21 @@
 import type {
+  AddPackageInput,
+  CorrectStockInput,
   CreateProductInput,
   DayProfile,
   DayTimeline,
+  IntakeLogEntry,
+  InventoryStatus,
+  InventoryTransaction,
   Product,
+  RecordIntakeInput,
   ScheduledIntake,
   SearchResult,
   StartTreatmentInput,
   Treatment,
   TreatmentHistory,
   UpdateDayProfileInput,
+  UpdateInventoryPolicyInput,
   UpdateProductInput,
 } from '@pillstack/contracts';
 
@@ -67,6 +74,8 @@ export const api = {
   },
 
   treatments: {
+    list: (query: { status?: string } = {}) =>
+      request<Treatment[]>(`/api/treatments${query.status ? `?status=${query.status}` : ''}`),
     start: (input: StartTreatmentInput) => post<Treatment>('/api/treatments', input),
     history: (id: string) => request<TreatmentHistory>(`/api/treatments/${id}/history`),
     changePlan: (id: string, input: unknown) => post<Treatment>(`/api/treatments/${id}/plan`, input),
@@ -84,6 +93,33 @@ export const api = {
       post<DayTimeline>('/api/schedule/move', input),
     clearOverride: (input: { planDoseId: string; occurrenceDate: string }) =>
       post<DayTimeline>('/api/schedule/clear-override', input),
+  },
+
+  inventory: {
+    list: () => request<InventoryStatus[]>('/api/inventory'),
+    forProduct: (productId: string) =>
+      request<InventoryStatus>(`/api/products/${productId}/inventory`),
+    ledger: (productId: string) =>
+      request<InventoryTransaction[]>(`/api/products/${productId}/inventory/ledger`),
+    addPackage: (productId: string, input: AddPackageInput) =>
+      post<InventoryStatus>(`/api/products/${productId}/inventory/packages`, input),
+    correct: (productId: string, input: CorrectStockInput) =>
+      post<InventoryStatus>(`/api/products/${productId}/inventory/correction`, input),
+    discard: (productId: string, packageId: string, note?: string) =>
+      post<InventoryStatus>(`/api/products/${productId}/inventory/discard`, { packageId, note }),
+    updatePolicy: (productId: string, input: UpdateInventoryPolicyInput) =>
+      request<InventoryStatus>(`/api/products/${productId}/inventory/policy`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      }),
+  },
+
+  intakeLog: {
+    record: (input: RecordIntakeInput) => post<IntakeLogEntry>('/api/intake-log', input),
+    clear: (input: { planDoseId: string; occurrenceDate: string }) =>
+      post<void>('/api/intake-log/clear', input),
+    forProduct: (productId: string) =>
+      request<IntakeLogEntry[]>(`/api/products/${productId}/intake-log`),
   },
 
   settings: {

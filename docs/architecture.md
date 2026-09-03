@@ -160,6 +160,14 @@ separate is what stops the timeline UI from shredding the history.
 correction stores both the counted `absolute_quantity` and the derived
 `quantity_delta`, so "I recounted and there were 42" stays legible.
 
+A correction's delta is deliberately **not** the difference from the projected
+figure. It is `counted − (cumulative ledger sum through that day)`, so that
+after applying it the ledger sum *equals* what the user counted. That is the
+invariant that lets inference restart cleanly the next day and never re-derive
+the days before — otherwise a correction's meaning would drift the moment an
+older plan version was touched. `correctionDelta()` in
+`domain/inventory/projection.ts` is the only place that computes it.
+
 The requirement that inventory must work even when the user never confirms a
 dose is handled without a background job:
 
@@ -413,7 +421,7 @@ an intake → watch stock drop.
 | # | Scope |
 |---|---|
 | 1 ✅ | Workspaces, SQLite, Kysely migrations, products, substances, ingredients, treatments, versioned intake plans, day profile, daily timeline |
-| 2 | Inventory ledger, packages, depletion and reorder projection, treatment history views and events |
+| 2 ✅ | Inventory ledger, packages, depletion and reorder projection, intake log, treatment history views |
 | 3 | Constraints, drag-with-warning on the timeline, reminder rules and notification outbox, browser delivery |
 | 4 | Physician PDF, treatment history PDF, JSON export/import, backup and restore |
 | 5 | UX polish, schedule optimizer, optional Electron packaging |

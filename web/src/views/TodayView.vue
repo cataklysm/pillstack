@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { DayTimeline, ScheduledIntake } from '@pillstack/contracts';
+import type { DayTimeline, InventoryStatus, ScheduledIntake } from '@pillstack/contracts';
 import { computed, onMounted, ref } from 'vue';
 import { api, ApiError } from '../api';
 
 const timeline = ref<DayTimeline | null>(null);
 const nextIntake = ref<ScheduledIntake | null>(null);
+const lowStock = ref<InventoryStatus[]>([]);
 const date = ref<string>('');
 const today = ref<string>('');
 const error = ref<string | null>(null);
@@ -77,6 +78,43 @@ async function resetMove(intake: ScheduledIntake) {
   });
 }
 
+/**
+ * Confirming is optional. Inventory falls back to the plan for anything left
+ * unrecorded, so ticking a dose off adds precision rather than being a chore
+ * the numbers depend on.
+ */
+async function record(intake: ScheduledIntake, status: 'taken' | 'skipped') {
+  try {
+    if (intake.status === status) {
+      await api.intakeLog.clear({
+        planDoseId: intake.planDoseId,
+        occurrenceDate: intake.occurrenceDate,
+      });
+    } else {
+      await api.intakeLog.record({
+        planDoseId: intake.planDoseId,
+        occurrenceDate: intake.occurrenceDate,
+        scheduledAt: intake.scheduledAt,
+        status,
+      });
+    }
+    await load(date.value);
+    await loadAttention();
+  } catch (cause) {
+    error.value = cause instanceof ApiError ? cause.message : 'could not record that intake';
+  }
+}
+
+async function loadAttention() {
+  try {
+    const statuses = await api.inventory.list();
+    lowStock.value = statuses.filter((entry) => entry.reorderDue);
+  } catch {
+    // The timeline is the point of this page; a failing sidebar must not break it.
+    lowStock.value = [];
+  }
+}
+
 function formatDate(value: string): string {
   return new Date(`${value}T12:00:00Z`).toLocaleDateString(undefined, {
     weekday: 'long',
@@ -86,7 +124,10 @@ function formatDate(value: string): string {
   });
 }
 
-onMounted(() => void load());
+onMounted(() => {
+  void load();
+  void loadAttention();
+});
 </script>
 
 <template>
@@ -103,6 +144,23 @@ onMounted(() => void load());
     </div>
 
     <p v-if="error" class="banner error">{{ error }}</p>
+
+    <!-- Answers "are prescriptions or purchases required soon?" -->
+    <div v-if="lowStock.length" class="card" style="margin-bottom: 1.25rem">
+      <div class="card-body">
+        <div class="small muted">Running low</div>
+        <ul style="margin: 0.4rem 0 0; padding-left: 1.1rem">
+          <li v-for="status in lowStock" :key="status.productId" class="small">
+            <RouterLink :to="`/products/${status.productId}`">{{ status.productName }}</RouterLink>
+            — {{ Math.round(status.currentQuantity) }} {{ status.packageUnit }} left<template
+              v-if="status.runOutDate"
+            >, runs out {{ status.runOutDate }}</template
+            >.
+            <span v-if="status.policy.reorderLeadTimeDays">Order now.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
 
     <div v-if="nextIntake" class="card" style="margin-bottom: 1.25rem">
       <div class="card-body">
@@ -164,6 +222,21 @@ onMounted(() => void load());
                 <button class="subtle" @click="editing = null">Cancel</button>
               </template>
               <template v-else>
+                <button
+                  class="subtle"
+                  :class="{ primary: intake.status === 'taken' }"
+                  :title="intake.status === 'taken' ? 'Recorded as taken — click to undo' : 'Record as taken'"
+                  @click="record(intake, 'taken')"
+                >
+                  {{ intake.status === 'taken' ? '✓ Taken' : 'Taken' }}
+                </button>
+                <button
+                  class="subtle"
+                  :title="intake.status === 'skipped' ? 'Recorded as skipped — click to undo' : 'Record as skipped'"
+                  @click="record(intake, 'skipped')"
+                >
+                  {{ intake.status === 'skipped' ? '⊘ Skipped' : 'Skip' }}
+                </button>
                 <button class="subtle" @click="startEditing(intake)">Change time</button>
                 <button v-if="intake.movedByUser" class="subtle" @click="resetMove(intake)">
                   Reset

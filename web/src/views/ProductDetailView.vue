@@ -3,6 +3,7 @@ import type { Product, TreatmentHistory } from '@pillstack/contracts';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '../api';
+import InventoryPanel from '../components/InventoryPanel.vue';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
@@ -98,6 +99,8 @@ onMounted(() => void load());
           <p v-if="product.notes" class="small" style="margin-bottom: 0">{{ product.notes }}</p>
         </div>
       </div>
+
+      <InventoryPanel :product-id="product.id" />
 
       <div class="card">
         <div class="card-body">

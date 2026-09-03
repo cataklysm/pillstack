@@ -24,6 +24,8 @@ export const router = createRouter({
       component: () => import('./views/TreatmentEditView.vue'),
       props: true,
     },
+    { path: '/inventory', name: 'inventory', component: () => import('./views/InventoryView.vue') },
+    { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue') },
     { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
   ],
 });

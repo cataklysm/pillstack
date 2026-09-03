@@ -19,6 +19,7 @@ import {
 } from '../domain/treatments/planVersioning.js';
 import type { SummarizablePlan } from '../domain/treatments/scheduleSummary.js';
 import type { PillstackDatabase } from '../persistence/database.js';
+import { InventoryRepository } from '../persistence/repositories/inventoryRepository.js';
 import { ProductRepository } from '../persistence/repositories/productRepository.js';
 import {
   TreatmentRepository,
@@ -193,6 +194,23 @@ export class TreatmentService {
         createdAt: now,
       });
       await scoped.setStatus(treatmentId, 'paused', now);
+
+      // A zero-delta annotation so the inventory ledger explains the gap in
+      // consumption rather than leaving an unexplained flat stretch.
+      await new InventoryRepository(trx).insertTransaction({
+        id: createId(),
+        productId: treatment.productId,
+        inventoryPackageId: null,
+        transactionType: 'treatment_paused',
+        quantityDelta: 0,
+        absoluteQuantity: null,
+        occurredAt: now,
+        effectiveOn: input.pausedFrom,
+        intakeLogEntryId: null,
+        treatmentId,
+        note: input.reason ?? null,
+      });
+
       await scoped.insertEvent({
         id: createId(),
         treatmentId,

@@ -9,6 +9,8 @@ import { RouterLink, RouterView } from 'vue-router';
       <nav class="app-nav">
         <RouterLink to="/">Today</RouterLink>
         <RouterLink to="/products">Products</RouterLink>
+        <RouterLink to="/inventory">Inventory</RouterLink>
+        <RouterLink to="/history">History</RouterLink>
         <RouterLink to="/settings">Settings</RouterLink>
       </nav>
       <span class="small muted">local only &middot; no account, no cloud</span>

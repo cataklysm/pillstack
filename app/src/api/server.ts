@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConflictError, NotFoundError, ValidationError } from '../application/errors.js';
 import type { Services } from '../application/container.js';
+import { registerIntakeLogRoutes } from './routes/intakeLog.js';
+import { registerInventoryRoutes } from './routes/inventory.js';
 import { registerProductRoutes } from './routes/products.js';
 import { registerScheduleRoutes } from './routes/schedule.js';
 import { registerSettingsRoutes } from './routes/settings.js';
@@ -40,6 +42,8 @@ export function createServer(options: ServerOptions): FastifyInstance {
   registerProductRoutes(app, options.services);
   registerTreatmentRoutes(app, options.services);
   registerScheduleRoutes(app, options.services);
+  registerInventoryRoutes(app, options.services);
+  registerIntakeLogRoutes(app, options.services);
   registerSettingsRoutes(app, options.services);
 
   return app;
