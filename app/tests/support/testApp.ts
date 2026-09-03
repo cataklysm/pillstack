@@ -1,10 +1,18 @@
 import { fixedClock, type Clock } from '../../src/application/clock.js';
-import { createServices, type Services } from '../../src/application/container.js';
-import { createTestDatabase, type OpenedDatabase } from '../../src/persistence/database.js';
+import type { Services } from '../../src/application/container.js';
+import { ApplicationHost } from '../../src/application/host.js';
+import {
+  createTestDatabase,
+  migrateToLatest,
+  openDatabase,
+  type OpenedDatabase,
+} from '../../src/persistence/database.js';
 
 export interface TestApp {
-  services: Services;
-  opened: OpenedDatabase;
+  /** Resolved fresh each time: a restore rebuilds the whole service graph. */
+  readonly services: Services;
+  readonly opened: OpenedDatabase;
+  host: ApplicationHost;
   clock: Clock;
   close(): Promise<void>;
 }
@@ -14,18 +22,35 @@ export interface TestApp {
  * so schedule and history assertions do not depend on when or where the suite
  * runs.
  */
-export async function createTestApp(now = '2026-09-03T08:00:00.000Z'): Promise<TestApp> {
-  const opened = await createTestDatabase();
-  const clock = fixedClock(now);
-  const services = createServices(opened, clock);
+export async function createTestApp(
+  now = '2026-09-03T08:00:00.000Z',
+  /** Pass a file path when the test needs a database that survives a restore. */
+  location = ':memory:',
+): Promise<TestApp> {
+  const opened =
+    location === ':memory:'
+      ? await createTestDatabase()
+      : await (async () => {
+          const handle = openDatabase({ location });
+          await migrateToLatest(handle.db);
+          return handle;
+        })();
 
-  await services.settings.setTimeZone('Europe/Berlin');
+  const clock = fixedClock(now);
+  const host = new ApplicationHost(opened, clock, location);
+
+  await host.services.settings.setTimeZone('Europe/Berlin');
 
   return {
-    services,
-    opened,
+    host,
+    get services() {
+      return host.services;
+    },
+    get opened() {
+      return host.opened;
+    },
     clock,
-    close: () => opened.close(),
+    close: () => host.close(),
   };
 }
 

@@ -423,7 +423,7 @@ an intake → watch stock drop.
 | 1 ✅ | Workspaces, SQLite, Kysely migrations, products, substances, ingredients, treatments, versioned intake plans, day profile, daily timeline |
 | 2 ✅ | Inventory ledger, packages, depletion and reorder projection, intake log, treatment history views |
 | 3 ✅ | Constraints, move-with-warning on the timeline, reminder rules and notification outbox, browser delivery |
-| 4 | Physician PDF, treatment history PDF, JSON export/import, backup and restore |
+| 4 ✅ | Physician PDF, treatment history PDF, JSON export/import, backup and restore |
 | 5 | UX polish, schedule optimizer, optional Electron packaging |
 
 ---
@@ -499,3 +499,72 @@ Two rules the smoke test forced into the open:
 - A product whose stock was never recorded produces no reorder reminder at all.
   Without a package or a count there is nothing to run out of, and reporting
   "runs out tomorrow" for every untracked product is pure noise.
+
+---
+
+## 14. Exports and backup (Milestone 4)
+
+### PDFs without a font problem, and with one
+
+pdfmake draws both documents using the 14 standard PDF fonts, so no font file is
+bundled and no headless browser is downloaded — a physician plan is a 3 KB file
+produced entirely offline.
+
+The cost is that those fonts cover Latin-1 only, and the failure is silent
+rather than loud: an arrow prints as `!`, while en dashes, ellipses and curly
+quotes disappear without trace. Event summaries are frozen in the database at
+write time and render correctly in the web UI, so the substitution belongs at
+the moment of drawing, not in what is stored. `toPdfSafeText()` maps the
+offenders to ASCII equivalents and marks anything else with `?` rather than
+letting it vanish; `sanitizeDocument()` applies it to every string in a
+document definition, wrapping callbacks so header and footer text is covered too.
+
+### What goes on the page is separate from how it is drawn
+
+`domain/exports/` builds the medication plan and the history report as plain
+data; `exports/*Document.ts` turns that into pdfmake definitions. The content
+is therefore assertable in a test without generating a PDF, and the same
+structure feeds the on-screen preview.
+
+The medication plan reads the plan version *in force on the report date*, so
+asking for an earlier date prints what was actually being taken then rather than
+today's dose.
+
+### JSON export is not a backup
+
+`pillstack/export` v1 is a nested, readable, versioned snapshot for moving the
+data to another application. Import deliberately refuses a database that already
+holds products: merging two medication histories needs conflict rules nobody has
+specified, and guessing at them is how this kind of data gets corrupted.
+Restoring into an existing install is what backups are for.
+
+### Restore, and the two things that make it safe
+
+A backup is taken through SQLite's own online backup API — a consistent snapshot
+even mid-write, which copying the file by hand would not give. The archive holds
+`database.sqlite`, a `manifest.json` (checksum, schema version, row counts) and
+a plain `settings.json` so a human can see what is inside without SQLite.
+
+Restoring never silently overwrites. The archive is read into memory, its
+checksum verified, its database opened read-only and put through
+`integrity_check` and `foreign_key_check`, and its schema version compared
+against this build. Only then is a `pre_restore_safety` backup taken, the
+connection closed, the file swapped, and the service graph rebuilt.
+
+Two details that only showed up under test:
+
+- **A backup must never overwrite another one.** With two backups in the same
+  millisecond the filename collided — and during a restore the safety copy
+  landed on the very archive being restored, so the restore read back the
+  database it had just replaced. Names are now made unique, and the archive is
+  read into memory before anything is written.
+- **The WAL sidecars must go with the database file.** Leaving a `-wal` from the
+  old database beside the restored one lets SQLite replay it and quietly
+  resurrect the rows the restore was meant to discard.
+
+### Swapping the database under a running server
+
+`ApplicationHost` owns the open database and the service graph. Routes read
+`host.services` per request rather than capturing it, so a restore can rebuild
+every service on the new file without a restart — and a request that arrives a
+moment later talks to the restored database rather than a closed handle.

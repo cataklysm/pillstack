@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from './api/server.js';
-import { createServices } from './application/container.js';
+import { ApplicationHost } from './application/host.js';
 import { systemClock } from './application/clock.js';
 import { migrateToLatest, openDatabase } from './persistence/database.js';
 
@@ -18,7 +18,7 @@ const repositoryRoot = resolve(here, '../..');
  */
 const dataDirectory = process.env.PILLSTACK_DATA_DIR ?? resolve(repositoryRoot, 'data');
 const databaseLocation = resolve(dataDirectory, 'pillstack.sqlite');
-const host = process.env.PILLSTACK_HOST ?? '127.0.0.1';
+const bindAddress = process.env.PILLSTACK_HOST ?? '127.0.0.1';
 const port = Number(process.env.PILLSTACK_PORT ?? 5174);
 
 async function main(): Promise<void> {
@@ -29,8 +29,8 @@ async function main(): Promise<void> {
     console.log(`applied migrations: ${applied.join(', ')}`);
   }
 
-  const services = createServices(opened, systemClock);
-  const app = createServer({ services, logger: true });
+  const host = new ApplicationHost(opened, systemClock, databaseLocation);
+  const app = createServer({ host, logger: true });
 
   // In a packaged build the built SPA sits next to the server bundle and is
   // served from the same origin, so the app works with no network at all.
@@ -48,15 +48,15 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     console.log(`\n${signal} received, closing`);
     await app.close();
-    await opened.close();
+    await host.close();
     process.exit(0);
   };
 
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-  await app.listen({ host, port });
-  console.log(`PillStack listening on http://${host}:${port}`);
+  await app.listen({ host: bindAddress, port });
+  console.log(`PillStack listening on http://${bindAddress}:${port}`);
   console.log(`database: ${databaseLocation}`);
 }
 

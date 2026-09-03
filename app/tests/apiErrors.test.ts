@@ -13,7 +13,7 @@ describe('the API error surface', () => {
 
   beforeEach(async () => {
     app = await createTestApp();
-    server = createServer({ services: app.services });
+    server = createServer({ host: app.host });
     await server.ready();
   });
 

@@ -9,20 +9,23 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "schema:check": "vitest run tests/migrations.test.ts"
   },
   "dependencies": {
+    "@fastify/static": "^8.2.0",
     "@pillstack/contracts": "*",
     "better-sqlite3": "^12.4.1",
     "fastify": "^5.6.0",
-    "@fastify/static": "^8.2.0",
+    "jszip": "^3.10.1",
     "kysely": "^0.28.7",
+    "pdfmake": "^0.2.23",
     "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.3.0",
+    "@types/pdfmake": "^0.3.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

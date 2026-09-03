@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConflictError, NotFoundError, ValidationError } from '../application/errors.js';
 import type { Services } from '../application/container.js';
+import { registerBackupRoutes } from './routes/backup.js';
 import { registerConstraintRoutes } from './routes/constraints.js';
+import { registerExportRoutes } from './routes/exports.js';
 import { registerIntakeLogRoutes } from './routes/intakeLog.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
 import { registerProductRoutes } from './routes/products.js';
@@ -10,8 +12,16 @@ import { registerScheduleRoutes } from './routes/schedule.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTreatmentRoutes } from './routes/treatments.js';
 
+/**
+ * Routes resolve services through this rather than capturing them, so restoring
+ * a backup can rebuild the whole service graph without restarting the server.
+ */
+export interface ServiceProvider {
+  readonly services: Services;
+}
+
 export interface ServerOptions {
-  services: Services;
+  host: ServiceProvider;
   logger?: boolean;
 }
 
@@ -64,14 +74,16 @@ export function createServer(options: ServerOptions): FastifyInstance {
 
   app.get('/api/health', async () => ({ status: 'ok' }));
 
-  registerProductRoutes(app, options.services);
-  registerTreatmentRoutes(app, options.services);
-  registerScheduleRoutes(app, options.services);
-  registerInventoryRoutes(app, options.services);
-  registerIntakeLogRoutes(app, options.services);
-  registerConstraintRoutes(app, options.services);
-  registerReminderRoutes(app, options.services);
-  registerSettingsRoutes(app, options.services);
+  registerProductRoutes(app, options.host);
+  registerTreatmentRoutes(app, options.host);
+  registerScheduleRoutes(app, options.host);
+  registerInventoryRoutes(app, options.host);
+  registerIntakeLogRoutes(app, options.host);
+  registerConstraintRoutes(app, options.host);
+  registerReminderRoutes(app, options.host);
+  registerSettingsRoutes(app, options.host);
+  registerExportRoutes(app, options.host);
+  registerBackupRoutes(app, options.host);
 
   return app;
 }

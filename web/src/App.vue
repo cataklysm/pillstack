@@ -13,6 +13,8 @@ import NotificationBell from './components/NotificationBell.vue';
         <RouterLink to="/inventory">Inventory</RouterLink>
         <RouterLink to="/rules">Rules</RouterLink>
         <RouterLink to="/history">History</RouterLink>
+        <RouterLink to="/export">Export</RouterLink>
+        <RouterLink to="/backup">Backup</RouterLink>
         <RouterLink to="/settings">Settings</RouterLink>
       </nav>
       <NotificationBell />

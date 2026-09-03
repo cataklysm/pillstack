@@ -222,8 +222,10 @@ onMounted(() => void load());
           <h2>Your data</h2>
           <p class="small muted" style="margin-bottom: 0">
             Everything lives in a single SQLite file on this machine. No account, no telemetry, no
-            analytics, and no data leaves this computer. Backup, restore and the physician PDF
-            export arrive in Milestone 4.
+            analytics, and no data leaves this computer. Use
+            <RouterLink to="/backup">Backup</RouterLink> to make a copy you can restore, and
+            <RouterLink to="/export">Export</RouterLink> for the physician plan or a portable JSON
+            snapshot.
           </p>
         </div>
       </div>

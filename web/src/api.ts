@@ -1,15 +1,21 @@
 import type {
   AddPackageInput,
   AppNotification,
+  BackupInspection,
+  BackupRecord,
+  BackupSettings,
   ConstraintInput,
   CorrectStockInput,
   CreateProductInput,
   DayProfile,
   DayTimeline,
+  ImportResult,
   IntakeConstraint,
   IntakeLogEntry,
   InventoryStatus,
   InventoryTransaction,
+  JsonExport,
+  MedicationPlan,
   MovePreview,
   Product,
   RecordIntakeInput,
@@ -18,8 +24,10 @@ import type {
   ScheduledIntake,
   SearchResult,
   StartTreatmentInput,
+  RestoreResult,
   Treatment,
   TreatmentHistory,
+  TreatmentHistoryReport,
   UpdateDayProfileInput,
   UpdateInventoryPolicyInput,
   UpdateProductInput,
@@ -176,6 +184,40 @@ export const api = {
     due: () => request<AppNotification[]>('/api/notifications/due'),
     markDelivered: (ids: string[]) => post<void>('/api/notifications/delivered', { ids }),
     dismiss: (id: string) => post<void>(`/api/notifications/${id}/dismiss`),
+  },
+
+  exports: {
+    /** The report data, for previewing on screen before printing it. */
+    medicationPlan: (query: Record<string, string> = {}) =>
+      request<MedicationPlan>(`/api/exports/medication-plan?${new URLSearchParams(query)}`),
+    treatmentHistory: (query: Record<string, string> = {}) =>
+      request<TreatmentHistoryReport>(
+        `/api/exports/treatment-history?${new URLSearchParams(query)}`,
+      ),
+    /** Absolute URLs so the browser downloads rather than fetching into memory. */
+    medicationPlanPdfUrl: (query: Record<string, string> = {}) =>
+      `/api/exports/medication-plan.pdf?${new URLSearchParams(query)}`,
+    treatmentHistoryPdfUrl: (query: Record<string, string> = {}) =>
+      `/api/exports/treatment-history.pdf?${new URLSearchParams(query)}`,
+    jsonUrl: () => '/api/exports/data.json',
+    json: () => request<JsonExport>('/api/exports/data.json'),
+    import: (document: unknown) => post<ImportResult>('/api/exports/import', document),
+  },
+
+  backup: {
+    settings: () => request<BackupSettings>('/api/backup/settings'),
+    setDirectory: (directory: string) =>
+      request<BackupSettings>('/api/backup/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ directory }),
+      }),
+    list: () => request<BackupRecord[]>('/api/backups'),
+    create: (note?: string) => post<BackupRecord>('/api/backups', { note }),
+    inspect: (filePath: string) => post<BackupInspection>('/api/backups/inspect', { filePath }),
+    restore: (filePath: string) =>
+      post<RestoreResult>('/api/backups/restore', { filePath, confirm: true }),
+    downloadUrl: (filePath: string) =>
+      `/api/backups/download?filePath=${encodeURIComponent(filePath)}`,
   },
 
   search: (q: string) => request<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`),

@@ -6,7 +6,11 @@ import {
   startSummary,
   stopSummary,
 } from '../src/domain/treatments/planVersioning.js';
-import { describePlan, type SummarizablePlan } from '../src/domain/treatments/scheduleSummary.js';
+import {
+  describePlan,
+  type SummarizableDose,
+  type SummarizablePlan,
+} from '../src/domain/treatments/scheduleSummary.js';
 
 function plan(overrides: Partial<SummarizablePlan> = {}): SummarizablePlan {
   return {
@@ -30,8 +34,13 @@ function plan(overrides: Partial<SummarizablePlan> = {}): SummarizablePlan {
   };
 }
 
+/** The single dose of the base plan, as a definite value. */
+function baseDose(): SummarizableDose {
+  return plan().doses[0] as SummarizableDose;
+}
+
 function withDose(amount: number): SummarizablePlan {
-  return plan({ doses: [{ ...(plan().doses[0] as never), doseAmount: amount }] });
+  return plan({ doses: [{ ...baseDose(), doseAmount: amount }] });
 }
 
 describe('describePlan', () => {
@@ -208,7 +217,7 @@ describe('classifying a plan change', () => {
   });
 
   it('reports a schedule change when the timing moves', () => {
-    const moved = plan({ doses: [{ ...(plan().doses[0] as never), targetTime: '08:00' }] });
+    const moved = plan({ doses: [{ ...baseDose(), targetTime: '08:00' }] });
     expect(classifyPlanChange(plan(), moved)).toBe('schedule_changed');
   });
 
@@ -220,7 +229,7 @@ describe('classifying a plan change', () => {
 
   it('prefers schedule_changed when dose and timing both move', () => {
     const both = plan({
-      doses: [{ ...(plan().doses[0] as never), doseAmount: 10, targetTime: '08:00' }],
+      doses: [{ ...baseDose(), doseAmount: 10, targetTime: '08:00' }],
     });
     expect(classifyPlanChange(plan(), both)).toBe('schedule_changed');
   });
@@ -228,8 +237,8 @@ describe('classifying a plan change', () => {
   it('detects an added dose as a schedule change', () => {
     const twiceDaily = plan({
       doses: [
-        plan().doses[0] as never,
-        { ...(plan().doses[0] as never), targetTime: '09:00' },
+        baseDose(),
+        { ...baseDose(), targetTime: '09:00' },
       ],
     });
     expect(classifyPlanChange(plan(), twiceDaily)).toBe('schedule_changed');

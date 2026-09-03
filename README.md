@@ -32,14 +32,15 @@ npm run start --workspace=app         # everything on http://127.0.0.1:5174
 ### Tests
 
 ```bash
-npm test            # 209 tests: domain logic, schema invariants, services, HTTP
+npm test            # 244 tests: domain logic, schema invariants, services, HTTP
 ```
 
 ### Where the data lives
 
 `./data/pillstack.sqlite`, or wherever `PILLSTACK_DATA_DIR` points. That single
-file is the whole application state. Copying it is a complete backup; a
-first-class backup and restore flow arrives in Milestone 4.
+file is the whole application state. The Backup page writes it to a ZIP you can
+put anywhere, validates an archive before restoring it, and always takes a
+safety copy of the current database first.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -85,8 +86,8 @@ rewriting your history.
 | 1 — setup, SQLite, migrations, products, ingredients, schedules, daily timeline | done |
 | 2 — inventory ledger, depletion, reorder dates, intake log, history views | done |
 | 3 — constraints, warnings when moving intakes, reminders | done |
-| 4 — physician PDF, JSON export, backup and restore | next |
-| 5 — UX polish, schedule optimizer, desktop packaging | |
+| 4 — physician PDF, JSON export, backup and restore | done |
+| 5 — UX polish, schedule optimizer, desktop packaging | next |
 
 The schema already contains the tables for milestones 2 to 4 (inventory,
 constraints, reminders, backups) so that later work adds behaviour rather than

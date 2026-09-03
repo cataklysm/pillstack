@@ -3,7 +3,9 @@ import type { OpenedDatabase, PillstackDatabase } from '../persistence/database.
 import { DayProfileRepository, SettingsRepository } from '../persistence/repositories/settingsRepository.js';
 import { systemClock, type Clock } from './clock.js';
 import { ValidationError } from './errors.js';
+import { BackupService } from '../backup/backupService.js';
 import { ConstraintService } from './constraintService.js';
+import { ExportService } from './exportService.js';
 import { InventoryService } from './inventoryService.js';
 import { IntakeLogService } from './intakeLogService.js';
 import { ProductService } from './productService.js';
@@ -60,6 +62,8 @@ export interface Services {
   intakeLog: IntakeLogService;
   constraints: ConstraintService;
   reminders: ReminderService;
+  exports: ExportService;
+  backup: BackupService;
   search: SearchService;
   settings: SettingsService;
 }
@@ -69,8 +73,21 @@ export interface Services {
  * explicitly, so a test can build the same graph over an in-memory database
  * and a fixed clock.
  */
-export function createServices(opened: OpenedDatabase, clock: Clock = systemClock): Services {
-  const { db } = opened;
+/**
+ * What the service graph needs from its host: the live database, and a way to
+ * point at a different one after a restore.
+ */
+export interface ServiceHost {
+  opened: OpenedDatabase;
+  reload(location: string): Promise<void>;
+}
+
+export function createServices(
+  host: ServiceHost,
+  clock: Clock = systemClock,
+  databaseLocation = ':memory:',
+): Services {
+  const { db } = host.opened;
 
   // The schedule needs the constraint evaluator to annotate a day, and the
   // reminder generator needs both the schedule and the inventory projection.
@@ -86,6 +103,8 @@ export function createServices(opened: OpenedDatabase, clock: Clock = systemCloc
     intakeLog: new IntakeLogService(db, clock),
     constraints,
     reminders: new ReminderService(db, clock, schedule, inventory),
+    exports: new ExportService(db, clock),
+    backup: new BackupService(host, clock, databaseLocation),
     search: new SearchService(db),
     settings: new SettingsService(db, clock),
   };

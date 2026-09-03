@@ -7,4 +7,6 @@ export * from './constraints.js';
 export * from './inventory.js';
 export * from './intakeLog.js';
 export * from './reminders.js';
+export * from './exports.js';
+export * from './backup.js';
 export * from './search.js';
