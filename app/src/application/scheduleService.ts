@@ -1,4 +1,5 @@
 import {
+  applyOptimizationInputSchema,
   clearIntakeOverrideInputSchema,
   moveIntakeInputSchema,
   previewMoveInputSchema,
@@ -6,9 +7,11 @@ import {
   type LocalDate,
   type LocalTime,
   type MovePreview,
+  type OptimizationProposal,
   type ScheduledIntake,
 } from '@pillstack/contracts';
 import { addDays, instantToLocalDate } from '../domain/schedules/calendar.js';
+import { optimizeDay, type OptimizableIntake } from '../domain/schedules/optimizer.js';
 import { buildDayTimeline, findNextIntake } from '../domain/schedules/timeline.js';
 import type { PillstackDatabase } from '../persistence/database.js';
 import { ScheduleRepository } from '../persistence/repositories/scheduleRepository.js';
@@ -86,6 +89,71 @@ export class ScheduleService {
     ]);
 
     return { violations, currentViolations };
+  }
+
+  /**
+   * Propose a tidier arrangement of a day: fewer separate intake events, with
+   * every rule still respected. Nothing is written — the caller reviews the
+   * proposal and decides which moves to accept.
+   */
+  async proposeOptimization(date?: string): Promise<OptimizationProposal> {
+    const target = (date ?? (await this.today())) as LocalDate;
+    const timeline = await this.dayTimeline(target);
+    const dayProfile = await new DayProfileRepository(this.db).getDefault(
+      this.clock.now().toISOString(),
+    );
+
+    const { constraints, substancesByProduct } = await this.constraints.evaluationInputs();
+
+    const intakes: OptimizableIntake[] = timeline.slots
+      .flatMap((slot) => slot.intakes)
+      .map((intake) => ({
+        occurrenceKey: intake.occurrenceKey,
+        planDoseId: intake.planDoseId,
+        productId: intake.productId,
+        productName: intake.productName,
+        category: intake.category,
+        substanceIds: substancesByProduct.get(intake.productId) ?? [],
+        occurrenceDate: intake.occurrenceDate,
+        scheduledTime: intake.scheduledTime,
+        flexibility: intake.flexibility,
+        timingType: intake.timingType,
+        windowStartTime: intake.windowStartTime,
+        windowEndTime: intake.windowEndTime,
+      }));
+
+    return { date: target, ...optimizeDay({ intakes, constraints, dayProfile }) };
+  }
+
+  /**
+   * Accept some or all of a proposal. Like any other edit to the timeline this
+   * writes single-day overrides; the plan versions behind them are untouched.
+   */
+  async applyOptimization(rawInput: unknown): Promise<DayTimeline> {
+    const parsed = applyOptimizationInputSchema.safeParse(rawInput);
+    if (!parsed.success) throw new ValidationError('invalid proposal', parsed.error.issues);
+
+    const input = parsed.data;
+    const schedule = new ScheduleRepository(this.db);
+    const now = this.clock.now().toISOString();
+
+    for (const move of input.moves) {
+      if (!(await schedule.planDoseExists(move.planDoseId))) {
+        throw new NotFoundError('plan dose', move.planDoseId);
+      }
+
+      await schedule.upsertOverride({
+        id: createId(),
+        planDoseId: move.planDoseId,
+        occurrenceDate: input.date as LocalDate,
+        overrideType: 'moved',
+        overriddenTime: move.to,
+        reason: 'tidied into fewer intake events',
+        createdAt: now,
+      });
+    }
+
+    return this.dayTimeline(input.date);
   }
 
   /**

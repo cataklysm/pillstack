@@ -38,6 +38,7 @@ export class ScheduleRepository {
         'intake_plan_dose.window_end_time as window_end_time',
         'intake_plan_dose.meal_reference as meal_reference',
         'intake_plan_dose.meal_offset_minutes as meal_offset_minutes',
+        'intake_plan_dose.flexibility as flexibility',
         'intake_plan_dose.dose_amount as dose_amount',
         'intake_plan_dose.dose_unit as dose_unit',
         'intake_plan_dose.package_unit_quantity as package_unit_quantity',
@@ -81,6 +82,7 @@ export class ScheduleRepository {
       doseAmount: row.dose_amount,
       doseUnit: row.dose_unit,
       packageUnitQuantity: row.package_unit_quantity,
+      flexibility: row.flexibility,
       timing: {
         timingType: row.timing_type,
         targetTime: row.target_time as LocalTime | null,

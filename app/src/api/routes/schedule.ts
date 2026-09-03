@@ -20,6 +20,15 @@ export function registerScheduleRoutes(app: FastifyInstance, host: ServiceProvid
 
   app.post('/api/schedule/move', async (request) => host.services.schedule.moveIntake(request.body));
 
+  /** Proposes fewer intake events for a day. Nothing is written. */
+  app.get<{ Querystring: { date?: string } }>('/api/schedule/optimize', async (request) =>
+    host.services.schedule.proposeOptimization(request.query.date),
+  );
+
+  app.post('/api/schedule/optimize/apply', async (request) =>
+    host.services.schedule.applyOptimization(request.body),
+  );
+
   app.post('/api/schedule/clear-override', async (request) =>
     host.services.schedule.clearIntakeOverride(request.body),
   );

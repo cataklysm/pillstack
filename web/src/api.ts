@@ -17,6 +17,7 @@ import type {
   JsonExport,
   MedicationPlan,
   MovePreview,
+  OptimizationProposal,
   Product,
   RecordIntakeInput,
   ReminderRule,
@@ -114,6 +115,11 @@ export const api = {
     }) => post<DayTimeline>('/api/schedule/move', input),
     clearOverride: (input: { planDoseId: string; occurrenceDate: string }) =>
       post<DayTimeline>('/api/schedule/clear-override', input),
+    /** Proposes fewer intake events for a day. Nothing is written. */
+    optimize: (date: string) =>
+      request<OptimizationProposal>(`/api/schedule/optimize?date=${date}`),
+    applyOptimization: (date: string, moves: { planDoseId: string; to: string }[]) =>
+      post<DayTimeline>('/api/schedule/optimize/apply', { date, moves }),
   },
 
   inventory: {

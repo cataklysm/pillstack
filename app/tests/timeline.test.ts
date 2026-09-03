@@ -31,6 +31,7 @@ function candidate(overrides: Partial<TimelineCandidate> = {}): TimelineCandidat
     doseAmount: 5,
     doseUnit: 'mg',
     packageUnitQuantity: 1,
+    flexibility: 'flexible',
     timing: {
       timingType: 'fixed',
       targetTime: '21:30',

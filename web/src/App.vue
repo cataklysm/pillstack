@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router';
+import GlobalSearch from './components/GlobalSearch.vue';
 import NotificationBell from './components/NotificationBell.vue';
 </script>
 
@@ -17,6 +18,7 @@ import NotificationBell from './components/NotificationBell.vue';
         <RouterLink to="/backup">Backup</RouterLink>
         <RouterLink to="/settings">Settings</RouterLink>
       </nav>
+      <GlobalSearch />
       <NotificationBell />
       <span class="small muted">local only &middot; no account, no cloud</span>
     </header>

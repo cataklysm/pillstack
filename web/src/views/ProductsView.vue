@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { Product } from '@pillstack/contracts';
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { api } from '../api';
+
+const route = useRoute();
 
 const products = ref<Product[]>([]);
 const query = ref('');
@@ -40,7 +43,12 @@ function ingredientLine(product: Product): string {
     .join(', ');
 }
 
-onMounted(() => void load());
+onMounted(() => {
+  // Arriving from global search: pre-fill the filter with what was searched for.
+  const initial = route.query.q;
+  if (typeof initial === 'string') query.value = initial;
+  void load();
+});
 </script>
 
 <template>

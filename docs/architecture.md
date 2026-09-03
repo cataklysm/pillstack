@@ -424,7 +424,7 @@ an intake → watch stock drop.
 | 2 ✅ | Inventory ledger, packages, depletion and reorder projection, intake log, treatment history views |
 | 3 ✅ | Constraints, move-with-warning on the timeline, reminder rules and notification outbox, browser delivery |
 | 4 ✅ | Physician PDF, treatment history PDF, JSON export/import, backup and restore |
-| 5 | UX polish, schedule optimizer, optional Electron packaging |
+| 5 ◐ | UX polish and schedule optimizer done; Electron packaging documented but not built |
 
 ---
 
@@ -568,3 +568,62 @@ Two details that only showed up under test:
 `host.services` per request rather than capturing it, so a restore can rebuild
 every service on the new file without a restart — and a request that arrives a
 moment later talks to the restored database rather than a closed handle.
+
+---
+
+## 15. The schedule optimizer, and packaging (Milestone 5)
+
+### Tidying a day
+
+`domain/schedules/optimizer.ts` proposes arranging a day into fewer separate
+intake events. It is a greedy merge rather than a search, chosen because it is
+deterministic, and because every move it makes can be justified in one sentence
+to someone deciding whether to take their medication differently.
+
+Four properties it guarantees, each with a test:
+
+- it only ever moves a dose **into an intake event that already exists**, so it
+  never invents a new time of day;
+- it never moves a dose the user pinned (`flexibility: 'fixed'`), one tied to a
+  meal, or one outside its own window;
+- it never introduces a constraint violation — *and never aggravates one that
+  already exists*. Comparing violation identity alone turned out not to be
+  enough: pushing two substances that are already too close from 60 minutes
+  apart to 0 keeps the same violation on the books while plainly making the day
+  worse, so the distance is compared too;
+- it only proposes a move that actually removes an event, so shuffling one dose
+  out of a pair is never suggested.
+
+The result is a proposal. Nothing is written until the user accepts, and
+accepting writes single-day `schedule_override` rows like any other timeline
+edit — the plan versions behind them are untouched, and tomorrow is back on plan.
+
+The inputs the brief listed have been in the model since Milestone 1:
+`day_profile` anchors, `intake_plan_dose.flexibility`, window bounds, meal
+references and the constraint set. No schema change was needed.
+
+### Desktop packaging: the seam, not the installer
+
+`app/src/embedded.ts` exposes `startPillstack({ dataDirectory, port, webRoot })`.
+The command-line entry point is now a thin wrapper over it, and a desktop shell
+would call the same function and point a window at the returned URL. Passing
+port `0` asks the operating system for a free port, which a packaged app wants
+rather than fighting over a fixed one.
+
+That seam is tested: `tests/embedded.test.ts` boots the real application in
+process, checks it binds to loopback only, exercises the API, serves the SPA
+with client-side routing intact, and reopens the same data on a restart.
+
+**An Electron build is not included.** Two things stand in the way, and both are
+better stated than glossed over:
+
+1. Electron's runtime binary is a separate ~100 MB download that did not
+   complete in this environment, so nothing could be run or verified.
+2. `better-sqlite3` is a native module and would need rebuilding against
+   Electron's ABI (`@electron/rebuild`). This is the friction point flagged in
+   the technology table from the start, and the reason `node:sqlite` is worth
+   revisiting when packaging actually begins.
+
+Neither is a design problem — the shell is thin and the seam it would attach to
+is proven — but shipping an unverified Electron target would be worse than
+shipping none.

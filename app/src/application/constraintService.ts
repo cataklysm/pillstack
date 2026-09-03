@@ -104,6 +104,22 @@ export class ConstraintService {
     });
   }
 
+  /**
+   * The rules and the substance lookup, shared with the optimizer so both
+   * reason about exactly the same inputs.
+   */
+  async evaluationInputs(): Promise<{
+    constraints: IntakeConstraint[];
+    substancesByProduct: Map<string, string[]>;
+  }> {
+    const repository = new ConstraintRepository(this.db);
+    const [constraints, substancesByProduct] = await Promise.all([
+      repository.list(),
+      repository.loadSubstancesByProduct(),
+    ]);
+    return { constraints, substancesByProduct };
+  }
+
   /** Acknowledgements recorded against overrides on this date. */
   private async loadAcknowledgements(date: LocalDate): Promise<Set<string>> {
     const rows = await this.db

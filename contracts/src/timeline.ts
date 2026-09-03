@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { constraintViolationSchema } from './constraints.js';
 import {
+  doseFlexibilitySchema,
   identifierSchema,
   instantSchema,
   intakeStatusSchema,
@@ -55,6 +56,8 @@ export const scheduledIntakeSchema = z.object({
   packageUnitQuantity: z.number().nullable(),
   label: z.string().nullable(),
   instructions: z.string().nullable(),
+  /** Whether the optimizer may move this dose. */
+  flexibility: doseFlexibilitySchema,
   /** True when the time was derived from a meal anchor rather than stated explicitly. */
   timeIsDerived: z.boolean(),
   movedByUser: z.boolean(),

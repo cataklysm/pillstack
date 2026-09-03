@@ -3,6 +3,7 @@ import type {
   ConstraintViolation,
   DayTimeline,
   InventoryStatus,
+  OptimizationProposal,
   ScheduledIntake,
 } from '@pillstack/contracts';
 import { computed, onMounted, ref } from 'vue';
@@ -11,6 +12,11 @@ import { api, ApiError } from '../api';
 const timeline = ref<DayTimeline | null>(null);
 const nextIntake = ref<ScheduledIntake | null>(null);
 const lowStock = ref<InventoryStatus[]>([]);
+
+/** A proposal to arrange the day into fewer intake events. */
+const proposal = ref<OptimizationProposal | null>(null);
+const rejected = ref<Set<string>>(new Set());
+const tidying = ref(false);
 const date = ref<string>('');
 const today = ref<string>('');
 const error = ref<string | null>(null);
@@ -32,6 +38,12 @@ const isToday = computed(() => date.value === today.value);
 const violatedKeys = computed(
   () => new Set((timeline.value?.violations ?? []).flatMap((violation) => violation.occurrenceKeys)),
 );
+
+const dayProgress = computed(() => {
+  const intakes = (timeline.value?.slots ?? []).flatMap((slot) => slot.intakes);
+  const recorded = intakes.filter((intake) => intake.status !== 'pending').length;
+  return { recorded, total: intakes.length };
+});
 
 const totalIntakes = computed(
   () => timeline.value?.slots.reduce((count, slot) => count + slot.intakes.length, 0) ?? 0,
@@ -166,6 +178,52 @@ async function record(intake: ScheduledIntake, status: 'taken' | 'skipped') {
   }
 }
 
+/**
+ * Ask whether the day could be arranged into fewer intake events. Nothing is
+ * written until the user accepts: the proposal is only ever a suggestion, and
+ * accepting it writes single-day overrides like any other timeline edit.
+ */
+async function proposeTidy() {
+  tidying.value = true;
+  error.value = null;
+  try {
+    proposal.value = await api.schedule.optimize(date.value);
+    rejected.value = new Set();
+  } catch (cause) {
+    error.value = cause instanceof ApiError ? cause.message : 'could not work out a tidier day';
+  } finally {
+    tidying.value = false;
+  }
+}
+
+async function applyTidy() {
+  const accepted = (proposal.value?.moves ?? []).filter(
+    (move) => !rejected.value.has(move.planDoseId),
+  );
+  if (accepted.length === 0) {
+    proposal.value = null;
+    return;
+  }
+
+  try {
+    timeline.value = await api.schedule.applyOptimization(
+      date.value,
+      accepted.map((move) => ({ planDoseId: move.planDoseId, to: move.to })),
+    );
+    proposal.value = null;
+    if (isToday.value) nextIntake.value = (await api.schedule.next()).intake;
+  } catch (cause) {
+    error.value = cause instanceof ApiError ? cause.message : 'could not apply that';
+  }
+}
+
+function toggleMove(planDoseId: string) {
+  const next = new Set(rejected.value);
+  if (next.has(planDoseId)) next.delete(planDoseId);
+  else next.add(planDoseId);
+  rejected.value = next;
+}
+
 async function loadAttention() {
   try {
     const statuses = await api.inventory.list();
@@ -196,8 +254,14 @@ onMounted(() => {
     <div class="page-header">
       <h1>{{ isToday ? 'Today' : formatDate(date) }}</h1>
       <span v-if="isToday" class="muted">{{ formatDate(date) }}</span>
+      <span v-if="dayProgress.total" class="small muted">
+        {{ dayProgress.recorded }} of {{ dayProgress.total }} recorded
+      </span>
       <div class="spacer"></div>
       <div class="intake-actions">
+        <button class="subtle" :disabled="tidying" @click="proposeTidy">
+          {{ tidying ? 'Checking…' : 'Tidy this day' }}
+        </button>
         <button class="subtle" @click="shiftDay(-1)">&larr; Previous</button>
         <button v-if="!isToday" class="subtle" @click="load(today)">Today</button>
         <button class="subtle" @click="shiftDay(1)">Next &rarr;</button>
@@ -205,6 +269,58 @@ onMounted(() => {
     </div>
 
     <p v-if="error" class="banner error">{{ error }}</p>
+
+    <!--
+      The optimizer only ever proposes moving a dose into an intake that already
+      exists, never invents a new time, and never touches a pinned or
+      meal-relative dose. Accepting writes single-day overrides.
+    -->
+    <div v-if="proposal" class="card" style="margin-bottom: 1.25rem">
+      <div class="card-body">
+        <h2 v-if="proposal.moves.length">
+          {{ proposal.eventsBefore }} intakes could become {{ proposal.eventsAfter }}
+        </h2>
+        <h2 v-else>This day is already as tidy as it can be</h2>
+
+        <ul v-if="proposal.moves.length" style="margin: 0.7rem 0 0; padding-left: 0; list-style: none">
+          <li
+            v-for="move in proposal.moves"
+            :key="move.planDoseId"
+            style="display: flex; gap: 0.6rem; align-items: baseline; padding: 0.35rem 0"
+          >
+            <input
+              type="checkbox"
+              :checked="!rejected.has(move.planDoseId)"
+              :aria-label="`Move ${move.productName}`"
+              @change="toggleMove(move.planDoseId)"
+            />
+            <span>
+              <strong>{{ move.productName }}</strong>
+              {{ move.from }} &rarr; {{ move.to }}
+              <span class="small muted"> — {{ move.reason }}</span>
+            </span>
+          </li>
+        </ul>
+
+        <details v-if="proposal.untouched.length" style="margin-top: 0.8rem">
+          <summary class="small muted">
+            {{ proposal.untouched.length }} left where they are
+          </summary>
+          <ul class="small muted" style="margin: 0.4rem 0 0; padding-left: 1.1rem">
+            <li v-for="entry in proposal.untouched" :key="entry.productName + entry.time">
+              {{ entry.productName }} at {{ entry.time }} — {{ entry.reason }}
+            </li>
+          </ul>
+        </details>
+
+        <div style="display: flex; gap: 0.6rem; margin-top: 1rem">
+          <button v-if="proposal.moves.length" class="primary" @click="applyTidy">
+            Apply for this day
+          </button>
+          <button @click="proposal = null">{{ proposal.moves.length ? 'Cancel' : 'Close' }}</button>
+        </div>
+      </div>
+    </div>
 
     <!--
       A move is never blocked. The user is told exactly what it would break and

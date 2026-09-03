@@ -32,7 +32,7 @@ npm run start --workspace=app         # everything on http://127.0.0.1:5174
 ### Tests
 
 ```bash
-npm test            # 244 tests: domain logic, schema invariants, services, HTTP
+npm test            # 272 tests: domain logic, schema invariants, services, HTTP
 ```
 
 ### Where the data lives
@@ -67,6 +67,15 @@ See [docs/architecture.md](docs/architecture.md) for the design, and
 migration is generated from that file, and a test fails the build if the two
 ever drift.
 
+## Tidying a day
+
+"Tidy this day" on the timeline proposes arranging the day into fewer separate
+intake events. It only ever suggests moving a dose *into an intake that already
+exists* — it never invents a new time, never touches a dose you pinned or one
+tied to a meal, never breaks a rule you wrote, and never makes an existing clash
+worse. Nothing is written until you accept, and accepting records single-day
+overrides, not a change to your plan.
+
 ## Two things worth knowing
 
 **Schedules are versioned, never edited.** Raising a dose closes the current
@@ -87,7 +96,7 @@ rewriting your history.
 | 2 — inventory ledger, depletion, reorder dates, intake log, history views | done |
 | 3 — constraints, warnings when moving intakes, reminders | done |
 | 4 — physician PDF, JSON export, backup and restore | done |
-| 5 — UX polish, schedule optimizer, desktop packaging | next |
+| 5 — UX polish, schedule optimizer, desktop packaging | optimizer and UX done; packaging documented, not built |
 
 The schema already contains the tables for milestones 2 to 4 (inventory,
 constraints, reminders, backups) so that later work adds behaviour rather than

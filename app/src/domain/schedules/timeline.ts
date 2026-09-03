@@ -1,5 +1,6 @@
 import type {
   DayProfile,
+  DoseFlexibility,
   DayTimeline,
   IntakeStatus,
   LocalDate,
@@ -33,6 +34,8 @@ export interface TimelineCandidate {
   doseAmount: number;
   doseUnit: string;
   packageUnitQuantity: number | null;
+  /** Whether the optimizer may move this dose. */
+  flexibility: DoseFlexibility;
   timing: DoseTiming;
   recurrence: RecurrencePattern;
   effectivePeriod: PlanEffectivePeriod;
@@ -183,6 +186,7 @@ function toScheduledIntake(
     packageUnitQuantity: candidate.packageUnitQuantity,
     label: candidate.label,
     instructions: candidate.instructions,
+    flexibility: candidate.flexibility,
     timeIsDerived,
     movedByUser,
     status: status ?? 'pending',

@@ -1,63 +1,50 @@
-import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from './api/server.js';
-import { ApplicationHost } from './application/host.js';
-import { systemClock } from './application/clock.js';
-import { migrateToLatest, openDatabase } from './persistence/database.js';
+import { startPillstack } from './embedded.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, '../..');
 
 /**
+ * The command-line entry point: a thin wrapper over `startPillstack`, which a
+ * desktop shell would call in exactly the same way.
+ *
  * Local-first defaults: the database sits in a plain directory the user owns,
  * and the server binds to the loopback interface only. Exposing PillStack to
  * the LAN takes a deliberate PILLSTACK_HOST override, because this database
  * holds health information.
  */
 const dataDirectory = process.env.PILLSTACK_DATA_DIR ?? resolve(repositoryRoot, 'data');
-const databaseLocation = resolve(dataDirectory, 'pillstack.sqlite');
 const bindAddress = process.env.PILLSTACK_HOST ?? '127.0.0.1';
 const port = Number(process.env.PILLSTACK_PORT ?? 5174);
 
 async function main(): Promise<void> {
-  const opened = openDatabase({ location: databaseLocation });
-  const applied = await migrateToLatest(opened.db);
+  const instance = await startPillstack({
+    dataDirectory,
+    port,
+    bindAddress,
+    // In a packaged build the built SPA sits next to the server bundle and is
+    // served from the same origin, so the app works with no network at all.
+    webRoot: resolve(repositoryRoot, 'web/dist'),
+    logger: true,
+  });
 
-  if (applied.length > 0) {
-    console.log(`applied migrations: ${applied.join(', ')}`);
-  }
-
-  const host = new ApplicationHost(opened, systemClock, databaseLocation);
-  const app = createServer({ host, logger: true });
-
-  // In a packaged build the built SPA sits next to the server bundle and is
-  // served from the same origin, so the app works with no network at all.
-  const webRoot = resolve(repositoryRoot, 'web/dist');
-  if (existsSync(webRoot)) {
-    await app.register(fastifyStatic, { root: webRoot });
-    app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith('/api/')) {
-        return reply.status(404).send({ error: 'unknown endpoint' });
-      }
-      return reply.sendFile('index.html');
-    });
+  if (instance.appliedMigrations.length > 0) {
+    console.log(`applied migrations: ${instance.appliedMigrations.join(', ')}`);
   }
 
   const shutdown = async (signal: string) => {
-    console.log(`\n${signal} received, closing`);
-    await app.close();
-    await host.close();
+    console.log(`
+${signal} received, closing`);
+    await instance.stop();
     process.exit(0);
   };
 
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-  await app.listen({ host: bindAddress, port });
-  console.log(`PillStack listening on http://${bindAddress}:${port}`);
-  console.log(`database: ${databaseLocation}`);
+  console.log(`PillStack listening on ${instance.url}`);
+  console.log(`database: ${instance.databaseLocation}`);
 }
 
 main().catch((error: unknown) => {

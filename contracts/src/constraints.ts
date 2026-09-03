@@ -118,6 +118,37 @@ export const movePreviewSchema = z.object({
   currentViolations: z.array(constraintViolationSchema),
 });
 
+/** A proposal to tidy a day into fewer intake events. Nothing is written. */
+export const proposedMoveSchema = z.object({
+  occurrenceKey: z.string(),
+  planDoseId: identifierSchema,
+  productName: z.string(),
+  from: localTimeSchema,
+  to: localTimeSchema,
+  reason: z.string(),
+});
+
+export const optimizationProposalSchema = z.object({
+  date: z.string(),
+  moves: z.array(proposedMoveSchema),
+  eventsBefore: z.number().int(),
+  eventsAfter: z.number().int(),
+  remainingViolations: z.array(constraintViolationSchema),
+  untouched: z.array(
+    z.object({ productName: z.string(), time: localTimeSchema, reason: z.string() }),
+  ),
+});
+
+export const applyOptimizationInputSchema = z.object({
+  date: z.string(),
+  /** The subset of proposed moves the user accepted. */
+  moves: z.array(z.object({ planDoseId: identifierSchema, to: localTimeSchema })).min(1),
+});
+
+export type ProposedMove = z.infer<typeof proposedMoveSchema>;
+export type OptimizationProposal = z.infer<typeof optimizationProposalSchema>;
+export type ApplyOptimizationInput = z.input<typeof applyOptimizationInputSchema>;
+
 export type ConstraintType = z.infer<typeof constraintTypeSchema>;
 export type ConstraintSeverity = z.infer<typeof constraintSeveritySchema>;
 export type ConstraintEndpoint = z.infer<typeof constraintEndpointSchema>;
